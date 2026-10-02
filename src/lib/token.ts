@@ -56,6 +56,7 @@ export interface TokenConfig {
   taxWithdrawAuthority?: string;
   revokeMintAuthority: boolean;
   revokeFreezeAuthority: boolean;
+  revokeUpdateAuthority?: boolean;
 }
 
 export interface UpdateMetadataConfig {
@@ -86,7 +87,8 @@ function createMetadataInstruction(
   updateAuthority: PublicKey,
   name: string,
   symbol: string,
-  uri: string
+  uri: string,
+  isMutable: boolean
 ): TransactionInstruction {
   const data = Buffer.alloc(1000);
   let offset = 0;
@@ -133,8 +135,8 @@ function createMetadataInstruction(
   data.writeUInt8(0, offset);
   offset += 1;
 
-  // isMutable: bool = true
-  data.writeUInt8(1, offset);
+  // isMutable: false when update authority is intentionally revoked
+  data.writeUInt8(isMutable ? 1 : 0, offset);
   offset += 1;
 
   // collectionDetails: Option<CollectionDetails> = None
@@ -246,7 +248,7 @@ async function createStandardToken(
   );
 
   tx.add(
-    createMetadataInstruction(metadataPDA, mint, payer, payer, payer, config.name, config.symbol, metadataUri)
+    createMetadataInstruction(metadataPDA, mint, payer, payer, payer, config.name, config.symbol, metadataUri, !config.revokeUpdateAuthority)
   );
 
   tx.add(createAssociatedTokenAccountInstruction(payer, ata, payer, mint, TOKEN_PROGRAM_ID));
