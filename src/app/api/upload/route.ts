@@ -5,13 +5,27 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    if (
+      file.size > 5 * 1024 * 1024 ||
+      !["image/png", "image/jpeg"].includes(file.type)
+    )
+      return NextResponse.json(
+        { error: "Choose a PNG or JPG under 5MB." },
+        { status: 400 },
+      );
     const jwt = process.env.PINATA_JWT;
     if (!jwt) {
-      return NextResponse.json({ error: "Pinata not configured" }, { status: 500 });
+      return NextResponse.json(
+        {
+          error:
+            "Image storage is not configured. Add PINATA_JWT to the deployment.",
+        },
+        { status: 500 },
+      );
     }
 
     // Upload file to Pinata IPFS
@@ -29,7 +43,10 @@ export async function POST(request: NextRequest) {
     if (!res.ok) {
       const err = await res.text();
       console.error("Pinata upload error:", err);
-      return NextResponse.json({ error: "Failed to upload to IPFS" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to upload to IPFS" },
+        { status: 500 },
+      );
     }
 
     const data = await res.json();

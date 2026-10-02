@@ -1,34 +1,91 @@
 "use client";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import dynamic from "next/dynamic";
-import { Coins } from "lucide-react";
-
-const WalletMultiButton=dynamic(
-  ()=>import("@solana/wallet-adapter-react-ui").then(m=>m.WalletMultiButton),
-  {ssr:false}
+import { Coins, Droplets, TrendingUp, Menu, ChevronDown } from "lucide-react";
+const WalletMultiButton = dynamic(
+  () =>
+    import("@solana/wallet-adapter-react-ui").then((m) => m.WalletMultiButton),
+  { ssr: false },
 );
-
-export default function Navbar(){
-  return <>
-    <div className="promo-bar">
-      <span>⚠️ LAST CHANCE: 0.1 SOL CREATE COIN FEE (BACK TO 0.2 SOL IN 24H)</span>
-    </div>
-    <nav className="launch-nav">
-      <div className="nav-inner">
-        <Link href="/" className="brand">
-          <span className="brand-mark"><Coins size={19}/></span>
-          <span>Memers</span>
-        </Link>
-
-        <div className="nav-links">
-          <Link href="/">Create Coin</Link>
-          <Link href="/create-pool">Create Pool</Link>
-          <Link href="/copy-trending" className="nav-badged">Copy Trending Coins <b>NEW</b></Link>
-          <Link href="/tracker" className="nav-badged">Tracker <b className="live">LIVE</b></Link>
-        </div>
-
-        <div className="nav-wallet"><WalletMultiButton/></div>
+export default function Navbar() {
+  const path = usePathname();
+  const [open, setOpen] = useState(false);
+  const [language, setLanguage] = useState(false);
+  return (
+    <>
+      <div className="promo-bar">
+        CREATE YOUR SOLANA TOKEN • CONNECT YOUR WALLET TO GET STARTED
       </div>
-    </nav>
-  </>;
+      <nav className="launch-nav" aria-label="Main navigation">
+        <div className="nav-inner">
+          <Link href="/" className="brand">
+            <Coins size={28} className="brand-mark" />
+            <span>Memers</span>
+          </Link>
+          <button
+            className="mobile-toggle"
+            aria-label="Toggle navigation"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <Menu size={22} />
+          </button>
+          <div className={"nav-links " + (open ? "open" : "")}>
+            <Link
+              onClick={() => setOpen(false)}
+              href="/"
+              className={path === "/" ? "active" : ""}
+            >
+              <Coins size={16} />
+              Create Coin
+            </Link>
+            <Link
+              onClick={() => setOpen(false)}
+              href="/liquidity"
+              className={path.startsWith("/liquidity") ? "active" : ""}
+            >
+              <Droplets size={16} />
+              Manage Liquidity
+            </Link>
+            <Link
+              onClick={() => setOpen(false)}
+              href="/trending"
+              className={"nav-badged " + (path === "/trending" ? "active" : "")}
+            >
+              <TrendingUp size={16} />
+              Copy Trending Coins <b>NEW</b>
+            </Link>
+            <Link
+              onClick={() => setOpen(false)}
+              href="/x-feed"
+              className={"nav-badged " + (path === "/x-feed" ? "active" : "")}
+            >
+              <span>𝕏</span>Tracker <b className="live">LIVE</b>
+            </Link>
+          </div>
+          <div className="nav-actions">
+            <div className="language">
+              <button
+                aria-label="Change language"
+                aria-expanded={language}
+                onClick={() => setLanguage(!language)}
+              >
+                🇺🇸 EN <ChevronDown size={14} style={{ display: "inline" }} />
+              </button>
+              {language && (
+                <div className="language-menu">
+                  <button onClick={() => setLanguage(false)}>
+                    🇺🇸 English ✓
+                  </button>
+                </div>
+              )}
+            </div>
+            <WalletMultiButton />
+          </div>
+        </div>
+      </nav>
+    </>
+  );
 }

@@ -36,7 +36,9 @@ import {
   TokenMetadata,
 } from "@solana/spl-token-metadata";
 
-const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+const METADATA_PROGRAM_ID = new PublicKey(
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+);
 
 export interface TokenConfig {
   name: string;
@@ -88,7 +90,7 @@ function createMetadataInstruction(
   name: string,
   symbol: string,
   uri: string,
-  isMutable: boolean
+  isMutable: boolean,
 ): TransactionInstruction {
   const data = Buffer.alloc(1000);
   let offset = 0;
@@ -164,11 +166,15 @@ function buildMetadataJson(config: TokenConfig, baseUrl: string): object {
     name: config.name,
     symbol: config.symbol,
     description: config.description,
-    image: config.image.startsWith("http") ? config.image : `${baseUrl}${config.image}`,
+    image: config.image.startsWith("http")
+      ? config.image
+      : `${baseUrl}${config.image}`,
   };
 
   if (config.banner) {
-    metadata.banner = config.banner.startsWith("http") ? config.banner : `${baseUrl}${config.banner}`;
+    metadata.banner = config.banner.startsWith("http")
+      ? config.banner
+      : `${baseUrl}${config.banner}`;
   }
 
   const links: Record<string, string> = {};
@@ -190,8 +196,30 @@ export async function createToken(
   payer: PublicKey,
   config: TokenConfig,
   signTransaction: (tx: Transaction) => Promise<Transaction>,
-  baseUrl: string
+  baseUrl: string,
 ): Promise<TokenResult> {
+  if (!Number.isSafeInteger(config.supply) || config.supply <= 0)
+    throw new Error("Supply must be a positive whole number.");
+  if (
+    !Number.isInteger(config.decimals) ||
+    config.decimals < 0 ||
+    config.decimals > 9
+  )
+    throw new Error("Decimals must be between 0 and 9.");
+  if (
+    BigInt(config.supply) * 10n ** BigInt(config.decimals) >
+    18446744073709551615n
+  )
+    throw new Error(
+      "Supply exceeds the token program limit for these decimals.",
+    );
+  if (
+    Buffer.byteLength(config.name, "utf8") > 32 ||
+    Buffer.byteLength(config.symbol, "utf8") > 10
+  )
+    throw new Error("Token name or symbol is too long.");
+  if (!/^https?:\/\//.test(config.image))
+    throw new Error("Upload a token image before creating the token.");
   const mintKeypair = Keypair.generate();
   const mint = mintKeypair.publicKey;
 
@@ -201,12 +229,32 @@ export async function createToken(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ metadata: metadataJson, mint: mint.toBase58() }),
   });
-  const { uri: metadataUri } = await metadataRes.json();
+  const metadataData = await metadataRes.json();
+  if (!metadataRes.ok || typeof metadataData.uri !== "string")
+    throw new Error(
+      metadataData.error ||
+        "Metadata upload failed. No transaction was submitted.",
+    );
+  const metadataUri: string = metadataData.uri;
 
   if (config.enableTax) {
-    return createTaxToken(connection, payer, config, signTransaction, mintKeypair, metadataUri);
+    return createTaxToken(
+      connection,
+      payer,
+      config,
+      signTransaction,
+      mintKeypair,
+      metadataUri,
+    );
   } else {
-    return createStandardToken(connection, payer, config, signTransaction, mintKeypair, metadataUri);
+    return createStandardToken(
+      connection,
+      payer,
+      config,
+      signTransaction,
+      mintKeypair,
+      metadataUri,
+    );
   }
 }
 
@@ -216,15 +264,20 @@ async function createStandardToken(
   config: TokenConfig,
   signTransaction: (tx: Transaction) => Promise<Transaction>,
   mintKeypair: Keypair,
-  metadataUri: string
+  metadataUri: string,
 ): Promise<TokenResult> {
   const mint = mintKeypair.publicKey;
   const lamports = await connection.getMinimumBalanceForRentExemption(82);
-  const ata = getAssociatedTokenAddressSync(mint, payer, false, TOKEN_PROGRAM_ID);
+  const ata = getAssociatedTokenAddressSync(
+    mint,
+    payer,
+    false,
+    TOKEN_PROGRAM_ID,
+  );
 
   const [metadataPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-    METADATA_PROGRAM_ID
+    METADATA_PROGRAM_ID,
   );
 
   const tx = new Transaction();
@@ -236,28 +289,59 @@ async function createStandardToken(
       space: 82,
       lamports,
       programId: TOKEN_PROGRAM_ID,
-    })
+    }),
   );
 
   tx.add(
     createInitializeMintInstructionLegacy(
-      mint, config.decimals, payer,
+      mint,
+      config.decimals,
+      payer,
       config.revokeFreezeAuthority ? null : payer,
-      TOKEN_PROGRAM_ID
-    )
+      TOKEN_PROGRAM_ID,
+    ),
   );
 
   tx.add(
-    createMetadataInstruction(metadataPDA, mint, payer, payer, payer, config.name, config.symbol, metadataUri, !config.revokeUpdateAuthority)
+    createMetadataInstruction(
+      metadataPDA,
+      mint,
+      payer,
+      payer,
+      payer,
+      config.name,
+      config.symbol,
+      metadataUri,
+      !config.revokeUpdateAuthority,
+    ),
   );
 
-  tx.add(createAssociatedTokenAccountInstruction(payer, ata, payer, mint, TOKEN_PROGRAM_ID));
+  tx.add(
+    createAssociatedTokenAccountInstruction(
+      payer,
+      ata,
+      payer,
+      mint,
+      TOKEN_PROGRAM_ID,
+    ),
+  );
 
   const mintAmount = BigInt(config.supply) * BigInt(10 ** config.decimals);
-  tx.add(createMintToInstruction(mint, ata, payer, mintAmount, [], TOKEN_PROGRAM_ID));
+  tx.add(
+    createMintToInstruction(mint, ata, payer, mintAmount, [], TOKEN_PROGRAM_ID),
+  );
 
   if (config.revokeMintAuthority) {
-    tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.MintTokens, null, [], TOKEN_PROGRAM_ID));
+    tx.add(
+      createSetAuthorityInstruction(
+        mint,
+        payer,
+        AuthorityType.MintTokens,
+        null,
+        [],
+        TOKEN_PROGRAM_ID,
+      ),
+    );
   }
 
   const { blockhash } = await connection.getLatestBlockhash();
@@ -272,7 +356,12 @@ async function createStandardToken(
   });
   await connection.confirmTransaction(signature, "confirmed");
 
-  return { mint: mint.toBase58(), signature, tokenAccount: ata.toBase58(), metadataUri };
+  return {
+    mint: mint.toBase58(),
+    signature,
+    tokenAccount: ata.toBase58(),
+    metadataUri,
+  };
 }
 
 async function createTaxToken(
@@ -281,7 +370,7 @@ async function createTaxToken(
   config: TokenConfig,
   signTransaction: (tx: Transaction) => Promise<Transaction>,
   mintKeypair: Keypair,
-  metadataUri: string
+  metadataUri: string,
 ): Promise<TokenResult> {
   const mint = mintKeypair.publicKey;
   const withdrawAuthority = config.taxWithdrawAuthority
@@ -298,12 +387,22 @@ async function createTaxToken(
     updateAuthority: payer,
   };
 
-  const extensions = [ExtensionType.TransferFeeConfig, ExtensionType.MetadataPointer];
+  const extensions = [
+    ExtensionType.TransferFeeConfig,
+    ExtensionType.MetadataPointer,
+  ];
   const mintLen = getMintLen(extensions);
   const metadataLen = pack(tokenMetadata).length;
   const totalLen = mintLen + metadataLen;
-  const lamports = await connection.getMinimumBalanceForRentExemption(totalLen + 256);
-  const ata = getAssociatedTokenAddressSync(mint, payer, false, TOKEN_2022_PROGRAM_ID);
+  const lamports = await connection.getMinimumBalanceForRentExemption(
+    totalLen + 256,
+  );
+  const ata = getAssociatedTokenAddressSync(
+    mint,
+    payer,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+  );
 
   const tx = new Transaction();
 
@@ -314,29 +413,39 @@ async function createTaxToken(
       space: mintLen,
       lamports,
       programId: TOKEN_2022_PROGRAM_ID,
-    })
+    }),
   );
 
   // Initialize metadata pointer (must come before InitializeMint)
   tx.add(
     createInitializeMetadataPointerInstruction(
-      mint, payer, mint, TOKEN_2022_PROGRAM_ID
-    )
+      mint,
+      payer,
+      mint,
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   const maxFee = BigInt(config.maxTaxAmount) * BigInt(10 ** config.decimals);
   tx.add(
     createInitializeTransferFeeConfigInstruction(
-      mint, payer, withdrawAuthority, config.taxBasisPoints, maxFee, TOKEN_2022_PROGRAM_ID
-    )
+      mint,
+      payer,
+      withdrawAuthority,
+      config.taxBasisPoints,
+      maxFee,
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   tx.add(
     createInitializeMintInstruction(
-      mint, config.decimals, payer,
+      mint,
+      config.decimals,
+      payer,
       config.revokeFreezeAuthority ? null : payer,
-      TOKEN_2022_PROGRAM_ID
-    )
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   // Use Token-2022 native metadata instead of Metaplex
@@ -350,16 +459,42 @@ async function createTaxToken(
       uri: metadataUri,
       mintAuthority: payer,
       updateAuthority: payer,
-    })
+    }),
   );
 
-  tx.add(createAssociatedTokenAccountInstruction(payer, ata, payer, mint, TOKEN_2022_PROGRAM_ID));
+  tx.add(
+    createAssociatedTokenAccountInstruction(
+      payer,
+      ata,
+      payer,
+      mint,
+      TOKEN_2022_PROGRAM_ID,
+    ),
+  );
 
   const mintAmount = BigInt(config.supply) * BigInt(10 ** config.decimals);
-  tx.add(createMintToInstruction(mint, ata, payer, mintAmount, [], TOKEN_2022_PROGRAM_ID));
+  tx.add(
+    createMintToInstruction(
+      mint,
+      ata,
+      payer,
+      mintAmount,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    ),
+  );
 
   if (config.revokeMintAuthority) {
-    tx.add(createSetAuthorityInstruction(mint, payer, AuthorityType.MintTokens, null, [], TOKEN_2022_PROGRAM_ID));
+    tx.add(
+      createSetAuthorityInstruction(
+        mint,
+        payer,
+        AuthorityType.MintTokens,
+        null,
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
+    );
   }
 
   const { blockhash } = await connection.getLatestBlockhash();
@@ -374,7 +509,12 @@ async function createTaxToken(
   });
   await connection.confirmTransaction(signature, "confirmed");
 
-  return { mint: mint.toBase58(), signature, tokenAccount: ata.toBase58(), metadataUri };
+  return {
+    mint: mint.toBase58(),
+    signature,
+    tokenAccount: ata.toBase58(),
+    metadataUri,
+  };
 }
 
 function buildUpdateMetadataJson(config: UpdateMetadataConfig): object {
@@ -409,7 +549,7 @@ function createUpdateMetadataInstruction(
   updateAuthority: PublicKey,
   name: string,
   symbol: string,
-  uri: string
+  uri: string,
 ): TransactionInstruction {
   const data = Buffer.alloc(1000);
   let offset = 0;
@@ -489,7 +629,7 @@ export async function updateTokenMetadata(
   mintAddress: string,
   config: UpdateMetadataConfig,
   isToken2022: boolean,
-  signTransaction: (tx: Transaction) => Promise<Transaction>
+  signTransaction: (tx: Transaction) => Promise<Transaction>,
 ): Promise<string> {
   const mint = new PublicKey(mintAddress);
 
@@ -512,7 +652,7 @@ export async function updateTokenMetadata(
         updateAuthority: payer,
         field: "name",
         value: config.name,
-      })
+      }),
     );
     tx.add(
       createUpdateFieldInstruction({
@@ -521,7 +661,7 @@ export async function updateTokenMetadata(
         updateAuthority: payer,
         field: "symbol",
         value: config.symbol,
-      })
+      }),
     );
     tx.add(
       createUpdateFieldInstruction({
@@ -530,15 +670,25 @@ export async function updateTokenMetadata(
         updateAuthority: payer,
         field: "uri",
         value: metadataUri,
-      })
+      }),
     );
   } else {
     const [metadataPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-      METADATA_PROGRAM_ID
+      [
+        Buffer.from("metadata"),
+        METADATA_PROGRAM_ID.toBuffer(),
+        mint.toBuffer(),
+      ],
+      METADATA_PROGRAM_ID,
     );
     tx.add(
-      createUpdateMetadataInstruction(metadataPDA, payer, config.name, config.symbol, metadataUri)
+      createUpdateMetadataInstruction(
+        metadataPDA,
+        payer,
+        config.name,
+        config.symbol,
+        metadataUri,
+      ),
     );
   }
 
@@ -561,7 +711,7 @@ export async function harvestWithheldTokensToMint(
   connection: Connection,
   payer: PublicKey,
   mintAddress: string,
-  signTransaction: (tx: Transaction) => Promise<Transaction>
+  signTransaction: (tx: Transaction) => Promise<Transaction>,
 ): Promise<string> {
   const mint = new PublicKey(mintAddress);
 
@@ -576,22 +726,25 @@ export async function harvestWithheldTokensToMint(
   // Try broader search if first one returns nothing
   let tokenAccountKeys: PublicKey[] = [];
   if (accounts.length === 0) {
-    const allAccounts = await connection.getTokenAccountsByOwner(
-      payer,
-      { mint },
-      { commitment: "confirmed" }
-    ).catch(() => null);
+    const allAccounts = await connection
+      .getTokenAccountsByOwner(payer, { mint }, { commitment: "confirmed" })
+      .catch(() => null);
 
     // Also get all accounts for the mint
-    const largerAccounts = await connection.getProgramAccounts(TOKEN_2022_PROGRAM_ID, {
-      filters: [
-        { memcmp: { offset: 0, bytes: mint.toBase58() } },
-      ],
-    });
+    const largerAccounts = await connection.getProgramAccounts(
+      TOKEN_2022_PROGRAM_ID,
+      {
+        filters: [{ memcmp: { offset: 0, bytes: mint.toBase58() } }],
+      },
+    );
 
     for (const acc of largerAccounts) {
       try {
-        const unpacked = unpackAccount(acc.pubkey, acc.account, TOKEN_2022_PROGRAM_ID);
+        const unpacked = unpackAccount(
+          acc.pubkey,
+          acc.account,
+          TOKEN_2022_PROGRAM_ID,
+        );
         const feeAmount = getTransferFeeAmount(unpacked);
         if (feeAmount !== null && feeAmount.withheldAmount > BigInt(0)) {
           tokenAccountKeys.push(acc.pubkey);
@@ -603,7 +756,11 @@ export async function harvestWithheldTokensToMint(
   } else {
     for (const acc of accounts) {
       try {
-        const unpacked = unpackAccount(acc.pubkey, acc.account, TOKEN_2022_PROGRAM_ID);
+        const unpacked = unpackAccount(
+          acc.pubkey,
+          acc.account,
+          TOKEN_2022_PROGRAM_ID,
+        );
         const feeAmount = getTransferFeeAmount(unpacked);
         if (feeAmount !== null && feeAmount.withheldAmount > BigInt(0)) {
           tokenAccountKeys.push(acc.pubkey);
@@ -626,8 +783,8 @@ export async function harvestWithheldTokensToMint(
     createHarvestWithheldTokensToMintInstruction(
       mint,
       batch,
-      TOKEN_2022_PROGRAM_ID
-    )
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   const { blockhash } = await connection.getLatestBlockhash();
@@ -650,7 +807,7 @@ export async function withdrawWithheldTokensFromMint(
   payer: PublicKey,
   mintAddress: string,
   destinationAddress: string,
-  signTransaction: (tx: Transaction) => Promise<Transaction>
+  signTransaction: (tx: Transaction) => Promise<Transaction>,
 ): Promise<string> {
   const mint = new PublicKey(mintAddress);
   const destination = new PublicKey(destinationAddress);
@@ -659,13 +816,31 @@ export async function withdrawWithheldTokensFromMint(
 
   // Ensure destination ATA exists
   try {
-    await getAccount(connection, destination, "confirmed", TOKEN_2022_PROGRAM_ID);
+    await getAccount(
+      connection,
+      destination,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID,
+    );
   } catch {
     // If destination is a wallet, create ATA
     try {
       const destOwner = destination;
-      const ata = getAssociatedTokenAddressSync(mint, destOwner, false, TOKEN_2022_PROGRAM_ID);
-      tx.add(createAssociatedTokenAccountInstruction(payer, ata, destOwner, mint, TOKEN_2022_PROGRAM_ID));
+      const ata = getAssociatedTokenAddressSync(
+        mint,
+        destOwner,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          payer,
+          ata,
+          destOwner,
+          mint,
+          TOKEN_2022_PROGRAM_ID,
+        ),
+      );
       // Use the ATA as actual destination
       tx.add(
         createWithdrawWithheldTokensFromMintInstruction(
@@ -673,8 +848,8 @@ export async function withdrawWithheldTokensFromMint(
           ata,
           payer,
           [],
-          TOKEN_2022_PROGRAM_ID
-        )
+          TOKEN_2022_PROGRAM_ID,
+        ),
       );
 
       const { blockhash } = await connection.getLatestBlockhash();
@@ -682,10 +857,13 @@ export async function withdrawWithheldTokensFromMint(
       tx.feePayer = payer;
 
       const signedTx = await signTransaction(tx);
-      const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
-      });
+      const signature = await connection.sendRawTransaction(
+        signedTx.serialize(),
+        {
+          skipPreflight: false,
+          preflightCommitment: "confirmed",
+        },
+      );
       await connection.confirmTransaction(signature, "confirmed");
       return signature;
     } catch {
@@ -699,8 +877,8 @@ export async function withdrawWithheldTokensFromMint(
       destination,
       payer,
       [],
-      TOKEN_2022_PROGRAM_ID
-    )
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   const { blockhash } = await connection.getLatestBlockhash();
@@ -723,22 +901,27 @@ export async function withdrawWithheldTokensFromAccounts(
   payer: PublicKey,
   mintAddress: string,
   destinationAta: string,
-  signTransaction: (tx: Transaction) => Promise<Transaction>
+  signTransaction: (tx: Transaction) => Promise<Transaction>,
 ): Promise<string> {
   const mint = new PublicKey(mintAddress);
   const destination = new PublicKey(destinationAta);
 
   // Find accounts with withheld fees
-  const allAccounts = await connection.getProgramAccounts(TOKEN_2022_PROGRAM_ID, {
-    filters: [
-      { memcmp: { offset: 0, bytes: mint.toBase58() } },
-    ],
-  });
+  const allAccounts = await connection.getProgramAccounts(
+    TOKEN_2022_PROGRAM_ID,
+    {
+      filters: [{ memcmp: { offset: 0, bytes: mint.toBase58() } }],
+    },
+  );
 
   const tokenAccountKeys: PublicKey[] = [];
   for (const acc of allAccounts) {
     try {
-      const unpacked = unpackAccount(acc.pubkey, acc.account, TOKEN_2022_PROGRAM_ID);
+      const unpacked = unpackAccount(
+        acc.pubkey,
+        acc.account,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const feeAmount = getTransferFeeAmount(unpacked);
       if (feeAmount !== null && feeAmount.withheldAmount > BigInt(0)) {
         tokenAccountKeys.push(acc.pubkey);
@@ -761,8 +944,8 @@ export async function withdrawWithheldTokensFromAccounts(
       payer,
       [],
       batch,
-      TOKEN_2022_PROGRAM_ID
-    )
+      TOKEN_2022_PROGRAM_ID,
+    ),
   );
 
   const { blockhash } = await connection.getLatestBlockhash();
