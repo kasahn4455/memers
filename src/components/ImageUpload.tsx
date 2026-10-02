@@ -19,6 +19,7 @@ export default function ImageUpload({
   aspect = "square",
 }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState("");
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -30,17 +31,20 @@ export default function ImageUpload({
         return;
       }
 
+      const localPreview = URL.createObjectURL(file);
+      setPreview(localPreview);
       setUploading(true);
       try {
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("/api/upload", { method: "POST", body: formData });
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        if (!res.ok || data.error) throw new Error(data.error || "Upload failed");
         onChange(data.url);
         toast.success("Image uploaded");
-      } catch {
-        toast.error("Upload failed");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Upload failed";
+        toast.error(message);
       } finally {
         setUploading(false);
       }
@@ -63,14 +67,14 @@ export default function ImageUpload({
         {label}
       </label>
 
-      {value ? (
+      {(value || preview) ? (
         <div
           className={`relative rounded-2xl overflow-hidden border border-white/10 group ${sizeClass}`}
         >
-          <img src={value} alt={label} className="w-full h-full object-cover" />
+          <img src={value || preview} alt={label || "Token image preview"} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <button
-            onClick={() => onChange("")}
+            onClick={() => { onChange(""); setPreview(""); }}
             className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 hover:bg-red-500/80 hover:border-red-400/50 transition-all"
             aria-label="Remove image"
           >
