@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
 import { createToken, TokenConfig } from "@/lib/token";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 type Result = { mint: string; signature: string } | null;
 const steps = [
@@ -31,6 +32,7 @@ const steps = [
 export default function Home() {
   const { connection } = useConnection();
   const { publicKey, signTransaction, connected } = useWallet();
+  const { setVisible: setWalletVisible } = useWalletModal();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -58,6 +60,8 @@ export default function Home() {
     revokeMintAuthority: false,
     revokeFreezeAuthority: false,
     revokeUpdateAuthority: false,
+    creatorName: "",
+    creatorWebsite: "",
   });
   const update = <K extends keyof TokenConfig>(key: K, value: TokenConfig[K]) =>
     setForm((p) => ({ ...p, [key]: value }));
@@ -123,14 +127,8 @@ export default function Home() {
       const finalForm: TokenConfig = {
         ...form,
         image,
-        description:
-          modifyCreator && creatorName
-            ? form.description +
-              (form.description ? "\n\n" : "") +
-              "Creator: " +
-              creatorName +
-              (creatorWebsite ? " · " + creatorWebsite : "")
-            : form.description,
+        creatorName: modifyCreator ? creatorName.trim() : "",
+        creatorWebsite: modifyCreator ? creatorWebsite.trim() : "",
       };
       const res = await createToken(
         connection,
@@ -190,6 +188,18 @@ export default function Home() {
               onClick={() => {
                 setResult(null);
                 setStep(1);
+                setImageFile(null);
+                setModifyCreator(false);
+                setCreatorName("");
+                setCreatorWebsite("");
+                setForm({
+                  name: "", symbol: "", decimals: 9, supply: 1000000000,
+                  description: "", image: "", banner: "", website: "", twitter: "",
+                  telegram: "", discord: "", enableTax: false, taxBasisPoints: 0,
+                  maxTaxAmount: 0, taxWithdrawAuthority: "", revokeMintAuthority: false,
+                  revokeFreezeAuthority: false, revokeUpdateAuthority: false,
+                  creatorName: "", creatorWebsite: ""
+                });
               }}
             >
               Create another token
@@ -420,9 +430,9 @@ export default function Home() {
               <button
                 className="primary-action launch-button"
                 disabled={loading}
-                onClick={launch}
+                onClick={() => connected ? void launch() : setWalletVisible(true)}
               >
-                {loading ? "Creating Token..." : "Create Token"}{" "}
+                {loading ? "Creating Token..." : connected ? "Create Token" : "Connect Wallet to Create"}{" "}
                 {!loading && <Rocket size={17} />}
               </button>
             )}
