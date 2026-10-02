@@ -2,9 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { RefreshCw, Zap, Activity, Search, ExternalLink } from "lucide-react";
-import toast from "react-hot-toast";
 type Coin = {
   mint: string;
   name: string;
@@ -28,7 +26,6 @@ export default function Trending() {
   const [tokens, setTokens] = useState<Coin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const { connected } = useWallet();
   const router = useRouter();
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -58,10 +55,6 @@ export default function Trending() {
     return () => controller.abort();
   }, [load]);
   const copy = (coin: Coin) => {
-    if (!connected) {
-      toast.error("Please connect your wallet first");
-      return;
-    }
     sessionStorage.setItem("memers-copy-v1", JSON.stringify(coin));
     router.push("/");
   };
