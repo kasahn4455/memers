@@ -22,7 +22,7 @@ export default function Navbar(){
 
         <div className="nav-links">
           <Link href="/">Create Coin</Link>
-          <Link href="/manage-liquidity">Manage Liquidity</Link>
+          <Link href="/create-pool">Create Pool</Link>
           <Link href="/copy-trending" className="nav-badged">Copy Trending Coins <b>NEW</b></Link>
           <Link href="/tracker" className="nav-badged">Tracker <b className="live">LIVE</b></Link>
         </div>
