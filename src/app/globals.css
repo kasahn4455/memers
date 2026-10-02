@@ -688,3 +688,21 @@ body{min-height:100vh}
   .creator-card{padding:18px 14px!important}.form-grid.two,.social-grid,.creator-fields,.authority-grid,.how-grid{grid-template-columns:1fr!important}
   .footer-inner{flex-direction:column}.footer-links{flex-wrap:wrap}
 }
+
+
+/* ===== Shared secondary-page theme ===== */
+.tool-page,.legal-page{max-width:860px;margin:0 auto;padding:64px 20px 84px}
+.tool-hero{text-align:center;margin-bottom:28px}
+.tool-hero>span,.legal-page>span{display:inline-block;color:#7c3aed;font-size:9px;font-weight:800;letter-spacing:.15em;margin-bottom:9px}
+.tool-hero h1,.legal-page h1{font:800 36px/1.08 Inter,Arial,sans-serif;letter-spacing:-.04em}
+.tool-hero p{max-width:600px;margin:10px auto 0;color:#83838f;font-size:13px;line-height:1.65}
+.tool-card{max-width:650px;margin:0 auto;background:#0d0d13;border:1px solid #20202a;border-radius:12px;padding:26px}
+.tool-card h2{font-size:18px;font-weight:750;letter-spacing:-.025em;margin:13px 0 8px}.tool-card>p{font-size:11px;color:#737380;line-height:1.7}
+.tool-icon{width:38px;height:38px;border-radius:8px;background:#17121f;color:#a78bfa;display:grid;place-items:center}
+.tool-note{display:flex;align-items:flex-start;gap:9px;background:#101018;border:1px solid #262631;border-radius:7px;padding:12px;margin:18px 0;color:#858592;font-size:10px;line-height:1.55}.tool-note svg{flex:0 0 auto;color:#7ee2ba}
+.tool-primary{width:100%;height:42px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px;font-weight:800}
+.tool-primary:hover{background:#8b5cf6}.tool-primary:disabled{opacity:.35;cursor:not-allowed}
+.tool-label{display:flex;flex-direction:column;gap:8px;font-size:11px;font-weight:700;color:#c8c8d0;margin:18px 0}
+.tool-label input{background:#101018;border:1px solid #282833;border-radius:7px;padding:11px 12px;color:#fff;font-size:12px;outline:none}.tool-label input:focus{border-color:#7c3aed}
+.legal-page{max-width:760px}.legal-page h1{margin-bottom:24px}.legal-page h2{font-size:14px;font-weight:750;margin:28px 0 8px}.legal-page p{color:#80808c;font-size:11px;line-height:1.8}
+@media(max-width:760px){.tool-page,.legal-page{padding:44px 14px 62px}.tool-hero h1,.legal-page h1{font-size:30px}.tool-card{padding:19px}}
