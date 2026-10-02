@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { RefreshCw, ExternalLink } from "lucide-react";
+import { RefreshCw, ExternalLink, Wallet } from "lucide-react";
+import dynamic from "next/dynamic";
+const WalletMultiButton = dynamic(() => import("@solana/wallet-adapter-react-ui").then((m) => m.WalletMultiButton), { ssr: false });
 type Token = { mint: string; balance: string };
 export default function Liquidity({ meteora = false }: { meteora?: boolean }) {
   const { connection } = useConnection();
@@ -72,11 +74,12 @@ export default function Liquidity({ meteora = false }: { meteora?: boolean }) {
           For which token would you like to create {meteora ? "a Meteora" : "a"}{" "}
           pool?
         </label>
+        {!publicKey && <div className="wallet-gate compact"><div className="gate-icon"><Wallet size={24}/></div><h2>Connect your wallet</h2><p>Connect to load tokens held by this wallet.</p><WalletMultiButton /></div>}
         <select
           id="token-select-pool"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
-          disabled={loading}
+          disabled={loading || !publicKey}
         >
           <option value="">
             {loading ? "Loading tokens..." : "Choose your token"}
@@ -129,9 +132,7 @@ export default function Liquidity({ meteora = false }: { meteora?: boolean }) {
         </div>
         <div className="pools-empty">
           {!publicKey
-            ? meteora
-              ? "No Meteora pools found for this wallet."
-              : "No pools found with LP tokens."
+            ? "Connect your wallet to load tokens and open the appropriate DEX portfolio."
             : "View and manage your liquidity positions in the DEX portfolio."}
           {publicKey && (
             <p>
