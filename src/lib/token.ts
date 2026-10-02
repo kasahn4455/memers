@@ -59,6 +59,8 @@ export interface TokenConfig {
   revokeMintAuthority: boolean;
   revokeFreezeAuthority: boolean;
   revokeUpdateAuthority?: boolean;
+  creatorName?: string;
+  creatorWebsite?: string;
 }
 
 export interface UpdateMetadataConfig {
@@ -186,6 +188,14 @@ function buildMetadataJson(config: TokenConfig, baseUrl: string): object {
   if (Object.keys(links).length > 0) {
     metadata.external_url = config.website || "";
     metadata.extensions = links;
+  }
+
+  if (config.creatorName || config.creatorWebsite) {
+    metadata.creator = {
+      name: config.creatorName || "",
+      website: config.creatorWebsite || "",
+      wallet: "",
+    };
   }
 
   return metadata;
@@ -326,7 +336,7 @@ async function createStandardToken(
     ),
   );
 
-  const mintAmount = BigInt(config.supply) * BigInt(10 ** config.decimals);
+  const mintAmount = BigInt(config.supply) * 10n ** BigInt(config.decimals);
   tx.add(
     createMintToInstruction(mint, ata, payer, mintAmount, [], TOKEN_PROGRAM_ID),
   );
@@ -344,7 +354,7 @@ async function createStandardToken(
     );
   }
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
   tx.recentBlockhash = blockhash;
   tx.feePayer = payer;
   tx.partialSign(mintKeypair);
@@ -353,8 +363,13 @@ async function createStandardToken(
   const signature = await connection.sendRawTransaction(signedTx.serialize(), {
     skipPreflight: false,
     preflightCommitment: "confirmed",
+    maxRetries: 3,
   });
-  await connection.confirmTransaction(signature, "confirmed");
+  const confirmation = await connection.confirmTransaction(
+    { signature, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
+  if (confirmation.value.err) throw new Error("Token transaction failed on-chain.");
 
   return {
     mint: mint.toBase58(),
@@ -426,7 +441,7 @@ async function createTaxToken(
     ),
   );
 
-  const maxFee = BigInt(config.maxTaxAmount) * BigInt(10 ** config.decimals);
+  const maxFee = BigInt(config.maxTaxAmount) * 10n ** BigInt(config.decimals);
   tx.add(
     createInitializeTransferFeeConfigInstruction(
       mint,
@@ -472,7 +487,7 @@ async function createTaxToken(
     ),
   );
 
-  const mintAmount = BigInt(config.supply) * BigInt(10 ** config.decimals);
+  const mintAmount = BigInt(config.supply) * 10n ** BigInt(config.decimals);
   tx.add(
     createMintToInstruction(
       mint,
